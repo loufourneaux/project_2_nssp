@@ -315,3 +315,27 @@ def analyze_psd(emg, fs=1000, cutoff=20):
         plt.show()
     
     return lfpr
+
+
+def split(all_datasets, all_labels, subj_test_ids = [np.random.randint(0,26,1)]) :
+    """ 
+    Split the dataset by selecting test_size nb of subject for the test set size adn the rest for the training.
+    """
+    train_set = all_datasets.copy()
+    train_labels = all_labels.copy()
+
+    test_set =[]
+    test_labels=[]
+
+    for subj in subj_test_ids:
+        test_set.append(train_set.pop(subj))
+        test_labels.append(train_labels.pop(subj))
+    
+    # flatten 
+    train_set = np.vstack(train_set)  
+    train_labels = np.hstack(train_labels)     
+
+    test_set = np.vstack(test_set)  
+    test_labels = np.hstack(test_labels)  
+
+    return train_set, test_set, train_labels, test_labels
