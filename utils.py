@@ -4,6 +4,7 @@ import seaborn as sns
 from scipy.io import loadmat 
 from scipy.signal import butter
 from scipy.signal import filtfilt
+from scipy.signal import welch
 import pandas as pd
 
 # Solution: load a list of dicts
@@ -138,7 +139,7 @@ def build_dataset_from_ninapro(emg, stimulus, repetition, features=None):
     # Return the constructed dataset and corresponding labels
     return dataset, labels
 
-def high_pass_filter(data, cutoff=20, fs=1000, order=4):
+def high_pass_filter(data, cutoff=20, fs=2000, order=4):
     """
     Applies a high-pass filter to the input data.
     
@@ -215,46 +216,6 @@ def process_and_plot_emg(emg_data, stimulus, repetition, n_stimuli, n_repetition
     plt.show()
     return emg_envelopes
 
-def filter_low_mav_channels_multifeature(dataset, labels, n_features_per_channel):
-    """
-    Filters out channels with low MAV values (below the first quartile) and removes
-    corresponding feature values for those channels.
-    
-    Args:
-        dataset (np.ndarray): Dataset of shape (n_samples, n_channels * n_features_per_channel).
-        labels (np.ndarray): The corresponding labels of shape (n_samples,).
-        n_channels (int): The number of EMG channels.
-        n_features_per_channel (int): The number of features per channel.
-    
-    Returns:
-        filtered_dataset (np.ndarray): Dataset with features of low MAV channels removed.
-        labels (np.ndarray): The unchanged labels.
-        retained_channels (list): Indices of retained channels.
-    """
-    # Step 1: Extract MAV columns (assumes MAV is the first feature set)
-    mav_columns = dataset[:, :10]  # First `n_channels` columns are MAV
-    
-    # Step 2: Compute the average MAV for each channel
-    mav_values = np.mean(mav_columns, axis=0)
-    
-    # Step 3: Calculate the first quartile (Q1) threshold
-    q1 = np.percentile(mav_values, 25)
-    
-    # Step 4: Retain only channels with MAV >= Q1
-    retained_channels = [i for i, mav in enumerate(mav_values) if mav >= q1]
-    
-    # Step 5: Identify columns to retain in the dataset
-    retained_columns = []
-    for channel in retained_channels:
-        start = channel * n_features_per_channel
-        end = start + n_features_per_channel
-        retained_columns.extend(range(start, end))
-    
-    # Step 6: Filter the dataset to retain only the selected columns
-    filtered_dataset = dataset[:, retained_columns]
-    
-    return filtered_dataset, labels, retained_channels
-
 def analyze_feature(dataset, labels, n_stimuli, n_repetitions, feature):
     if feature == 'mav':
         dataset=dataset[:, :10]
@@ -316,26 +277,36 @@ def analyze_psd(emg, fs=1000, cutoff=20):
     
     return lfpr
 
-
-def split(all_datasets, all_labels, subj_test_ids = [np.random.randint(0,26,1)]) :
-    """ 
-    Split the dataset by selecting test_size nb of subject for the test set size adn the rest for the training.
+def filter_channels_with_zero_std(dataset, labels, n_features_per_channel):
     """
-    train_set = all_datasets.copy()
-    train_labels = all_labels.copy()
-
-    test_set =[]
-    test_labels=[]
-
-    for subj in subj_test_ids:
-        test_set.append(train_set.pop(subj))
-        test_labels.append(train_labels.pop(subj))
+    Filters out channels with at least one zero MAV value and removes
+    corresponding feature values for those channels.
     
-    # flatten 
-    train_set = np.vstack(train_set)  
-    train_labels = np.hstack(train_labels)     
-
-    test_set = np.vstack(test_set)  
-    test_labels = np.hstack(test_labels)  
-
-    return train_set, test_set, train_labels, test_labels
+    Args:
+        dataset (np.ndarray): Dataset of shape (n_samples, n_channels * n_features_per_channel).
+        labels (np.ndarray): The corresponding labels of shape (n_samples,).
+        n_features_per_channel (int): The number of features per channel.
+    
+    Returns:
+        filtered_dataset (np.ndarray): Dataset with features of zero MAV channels removed.
+        labels (np.ndarray): The unchanged labels.
+        retained_channels (list): Indices of retained channels.
+    """
+    # Step 1: Extract MAV columns (assumes MAV is the first feature set)
+    n_channels = dataset.shape[1] // n_features_per_channel
+    std_columns = dataset[:, n_channels:n_channels*2]  # First `n_channels` columns are MAV
+    
+    # Step 2: Identify channels with no zero MAV values
+    retained_channels = [i for i in range(std_columns.shape[1]) if not np.any(std_columns[:, i] == 0)]
+    
+    # Step 3: Identify columns to retain in the dataset
+    retained_columns = []
+    for channel in retained_channels:
+        start = channel * n_features_per_channel
+        end = start + n_features_per_channel
+        retained_columns.extend(range(start, end))
+    
+    # Step 4: Filter the dataset to retain only the selected columns
+    filtered_dataset = dataset[:, retained_columns]
+    
+    return filtered_dataset, labels, retained_channels
