@@ -310,3 +310,73 @@ def filter_channels_with_zero_std(dataset, labels, n_features_per_channel):
     filtered_dataset = dataset[:, retained_columns]
     
     return filtered_dataset, labels, retained_channels
+
+def split(all_datasets, all_labels, subj_test_ids = np.random.randint(0,26,1), shuffle =False) :
+    """ 
+    Split the dataset by selecting test_size nb of subject for the test set size adn the rest for the training.
+    """
+    train_set = all_datasets.copy()
+    train_labels = all_labels.copy()
+    test_set =[]
+    test_labels=[]
+    for i, subj in enumerate(subj_test_ids):
+        test_set.append(train_set.pop(subj - i ))
+        test_labels.append(train_labels.pop(subj - i ))
+    
+    # flatten 
+    train_set = np.vstack(train_set)  
+    train_labels = np.hstack(train_labels)     
+    test_set = np.vstack(test_set)  
+    test_labels = np.hstack(test_labels)  
+
+    # shuffle     
+    if shuffle:
+        from sklearn.utils import shuffle
+        train_set, train_labels = shuffle(train_set, train_labels,  random_state=0)
+        test_set, test_labels = shuffle(test_set, test_labels,  random_state=0)
+  
+    return train_set, test_set, train_labels, test_labels
+
+
+
+def features_to_df(feature, all_datasets, n_stimuli,n_repetitions, n_channels = 10) : 
+    # vizualize and compare features
+    subjects_list_for_pd = []
+    stims_list_for_pd = []
+    
+    for subj_id, dataset in enumerate(all_datasets):
+
+        if feature == 'mav':
+            dataset_=dataset[:, :10]
+        elif feature == 'std':
+            dataset_=dataset[:, 10:20]
+        elif feature == 'maxav':
+            dataset_=dataset[:, 20:30]
+        elif feature == 'rms':
+            dataset_=dataset[:, 30:40]
+        elif feature == 'wl':
+            dataset_=dataset[:, 40:50]
+        elif feature == 'ssc':
+            dataset_=dataset[:, 50:]
+
+        features_set =dataset_.reshape(n_stimuli, n_repetitions, n_channels)
+
+        for stimuli_idx in range(n_stimuli):
+            # average over the repetition
+            features_set_mean = features_set.mean(axis = 1)
+
+            # Save the labels for dataframe
+            subjects_list_for_pd.append(str(subj_id+1))
+            stims_list_for_pd.append(str(stimuli_idx+1))
+                
+            # Data
+            if subj_id == 0 and stimuli_idx == 0: df_features =  pd.DataFrame(features_set_mean[stimuli_idx, :]).T 
+            else : df_features = pd.concat((df_features, pd.DataFrame(features_set_mean[stimuli_idx, :]).T))
+
+    df_features['subj'] = subjects_list_for_pd
+    df_features['stim'] = stims_list_for_pd
+
+    df_features = df_features.reset_index()
+    df_features = df_features.drop(columns='index')
+
+    return df_features
